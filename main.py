@@ -75,6 +75,53 @@ def main():
     summary = get_summary(final_state)
     render_debate_end(final_state, summary)
 
+    # Save transcript and run evaluation
+    save_and_evaluate_transcript(final_state)
+
+
+def save_and_evaluate_transcript(final_state: dict):
+    import datetime
+    evals_dir = Path(__file__).parent / "data" / "evals"
+    evals_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    transcript_path = evals_dir / f"transcript_{timestamp}.json"
+
+    # Serialize state
+    serialized_messages = []
+    for m in final_state.get("messages", []):
+        serialized_messages.append({
+            "type": m.__class__.__name__,
+            "name": getattr(m, "name", None),
+            "content": getattr(m, "content", "") or "",
+            "tool_calls": getattr(m, "tool_calls", []) or [],
+            "tool_call_id": getattr(m, "tool_call_id", None),
+        })
+
+    transcript_data = {
+        "original_prompt": final_state.get("original_prompt"),
+        "agent_ids": final_state.get("agent_ids"),
+        "cumulative_scores": final_state.get("cumulative_scores"),
+        "scores_per_turn": final_state.get("scores_per_turn"),
+        "messages": serialized_messages,
+    }
+
+    with open(transcript_path, "w", encoding="utf-8") as f:
+        json.dump(transcript_data, f, indent=2)
+    print(f"\n[info] Saved debate transcript to {transcript_path}")
+
+    if config.enable_eval:
+        from evaluation import evaluate_debate
+        from ui import render_eval_report
+
+        eval_report = evaluate_debate(transcript_data, use_llm_judge=config.llm_eval)
+        render_eval_report(eval_report)
+
+        eval_path = evals_dir / f"eval_report_{timestamp}.json"
+        with open(eval_path, "w", encoding="utf-8") as f:
+            json.dump(eval_report.to_dict(), f, indent=2)
+        print(f"[info] Saved evaluation report to {eval_path}")
+
 
 def get_summary(final_state: dict) -> str:
     if config.is_offline:

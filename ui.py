@@ -122,3 +122,80 @@ def render_debate_end(final_state, summary: str):
         scoreboard.add_row(f"[{_color_for(name)}]{name}[/{_color_for(name)}]", f"{score:+.0f}")
     console.print(scoreboard)
     console.print(Panel(Text(summary, style="italic"), title="Summary", border_style="dim"))
+
+
+def render_eval_report(report):
+    """Renders rich tables for the evaluation report."""
+    console.rule("[bold magenta]Evaluation Report[/bold magenta]")
+    console.print(f"[bold]Topic:[/bold] {report.topic}")
+    console.print(f"[bold]Total Turns Evaluated:[/bold] {report.total_turns}\n")
+
+    # 1. Summary Overview Table
+    summary_table = Table(title="Overall Evaluation Metrics", show_header=True, header_style="bold green")
+    summary_table.add_column("Metric", style="bold")
+    summary_table.add_column("Score / Rate", justify="right")
+
+    summary_table.add_row("Tool Compliance Rate", f"{report.overall_tool_compliance_rate:.1%}")
+    summary_table.add_row("Tool Validity Rate", f"{report.overall_tool_validity_rate:.1%}")
+    summary_table.add_row("Citation Support Rate", f"{report.overall_citation_support_rate:.1%}")
+    summary_table.add_row("Format Compliance Rate", f"{report.overall_format_compliance_rate:.1%}")
+    summary_table.add_row("Unsupported Claim Rate", f"{report.overall_unsupported_claim_rate:.1%}")
+
+    console.print(summary_table)
+    console.print()
+
+    # 2. Per-Agent Breakdown
+    if report.agent_summaries:
+        agent_table = Table(title="Per-Agent Performance Summary", show_header=True, header_style="bold cyan")
+        agent_table.add_column("Agent")
+        agent_table.add_column("Turns", justify="right")
+        agent_table.add_column("Avg Words", justify="right")
+        agent_table.add_column("Format OK %", justify="right")
+        agent_table.add_column("Tool Calls", justify="right")
+        agent_table.add_column("Supported Claim %", justify="right")
+
+        for agent_id, metrics in report.agent_summaries.items():
+            agent_table.add_row(
+                f"[{_color_for(agent_id)}]{agent_id}[/{_color_for(agent_id)}]",
+                str(metrics["turns_count"]),
+                f"{metrics['avg_word_count']:.1f}",
+                f"{metrics['format_compliance_rate']:.1%}",
+                str(metrics["tool_calls_count"]),
+                f"{metrics['avg_supported_claim_rate']:.1%}",
+            )
+        console.print(agent_table)
+        console.print()
+
+    # 3. Turn-by-Turn Detail Table
+    if report.turn_records:
+        turns_table = Table(title="Turn-by-Turn Evaluation Breakdown", show_header=True, header_style="bold yellow", show_lines=True)
+        turns_table.add_column("Turn", justify="right")
+        turns_table.add_column("Agent")
+        turns_table.add_column("Words")
+        turns_table.add_column("Tool Calls")
+        turns_table.add_column("Claims (Supp/Tot)")
+        turns_table.add_column("Format OK")
+        turns_table.add_column("Critique / Issues")
+
+        for record in report.turn_records:
+            fmt_str = "[green]Yes[/green]" if record.format_compliant else "[red]No[/red]"
+            claims_str = f"{record.supported_claims_count}/{record.numeric_claims_count}"
+            critique_str = ""
+            if record.llm_critique:
+                critique_str = record.llm_critique
+            elif record.format_issues:
+                critique_str = "; ".join(record.format_issues)
+            else:
+                critique_str = "[dim]No issues detected[/dim]"
+
+            turns_table.add_row(
+                str(record.turn_number),
+                f"[{_color_for(record.agent_id)}]{record.agent_id}[/{_color_for(record.agent_id)}]",
+                str(record.word_count),
+                str(record.tool_calls_count),
+                claims_str,
+                fmt_str,
+                critique_str,
+            )
+        console.print(turns_table)
+        console.print()

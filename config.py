@@ -19,6 +19,8 @@ class Config:
     temperature: float = float(os.getenv("DEBATE_TEMPERATURE", "0.7"))
     max_turns_per_agent: int = int(os.getenv("DEBATE_MAX_TURNS", "6"))
     agent_timeout_seconds: int = int(os.getenv("DEBATE_AGENT_TIMEOUT", "30"))
+    enable_eval: bool = os.getenv("DEBATE_ENABLE_EVAL", "true").lower() in ("true", "1", "yes")
+    llm_eval: bool = os.getenv("DEBATE_LLM_EVAL", "false").lower() in ("true", "1", "yes")
 
     @property
     def is_offline(self) -> bool:

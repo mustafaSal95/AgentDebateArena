@@ -1,0 +1,85 @@
+{
+  "topic": "Should artificial intelligence replace human teachers in schools?",
+  "total_turns": 2,
+  "agent_ids": [
+    "Aria",
+    "Karl"
+  ],
+  "turn_records": [
+    {
+      "turn_number": 1,
+      "agent_id": "Aria",
+      "argument_text": "I strongly support AI in schools. Data shows AI tutored students achieved 25% higher test scores in math.",
+      "word_count": 18,
+      "format_compliant": true,
+      "format_issues": [],
+      "tool_calls_count": 1,
+      "opening_compliance": true,
+      "stat_citing_compliance": true,
+      "tool_validity_rate": 1.0,
+      "selection_fit": "db_only",
+      "query_redundancy_rate": 0.0,
+      "numeric_claims_count": 1,
+      "supported_claims_count": 1,
+      "supported_claim_rate": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "repetition_score": 0.0,
+      "rebuttal_overlap_score": 0.0,
+      "moderator_addressed": null,
+      "persona_adherence_score": null,
+      "rebuttal_quality_score": null,
+      "llm_groundedness_score": null,
+      "llm_critique": null
+    },
+    {
+      "turn_number": 2,
+      "agent_id": "Karl",
+      "argument_text": "While scores matter, human connection is irreplaceable. Children need empathetic teachers to thrive emotionally.",
+      "word_count": 14,
+      "format_compliant": true,
+      "format_issues": [],
+      "tool_calls_count": 1,
+      "opening_compliance": true,
+      "stat_citing_compliance": true,
+      "tool_validity_rate": 1.0,
+      "selection_fit": "web_only",
+      "query_redundancy_rate": 0.0,
+      "numeric_claims_count": 0,
+      "supported_claims_count": 0,
+      "supported_claim_rate": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "repetition_score": 0.0,
+      "rebuttal_overlap_score": 0.0,
+      "moderator_addressed": null,
+      "persona_adherence_score": null,
+      "rebuttal_quality_score": null,
+      "llm_groundedness_score": null,
+      "llm_critique": null
+    }
+  ],
+  "overall_tool_compliance_rate": 1.0,
+  "overall_tool_validity_rate": 1.0,
+  "overall_citation_support_rate": 1.0,
+  "overall_format_compliance_rate": 1.0,
+  "overall_unsupported_claim_rate": 0.0,
+  "agent_summaries": {
+    "Aria": {
+      "turns_count": 1,
+      "avg_word_count": 18.0,
+      "format_compliance_rate": 1.0,
+      "tool_calls_count": 1,
+      "avg_supported_claim_rate": 1.0,
+      "avg_repetition_score": 0.0
+    },
+    "Karl": {
+      "turns_count": 1,
+      "avg_word_count": 14.0,
+      "format_compliance_rate": 1.0,
+      "tool_calls_count": 1,
+      "avg_supported_claim_rate": 1.0,
+      "avg_repetition_score": 0.0
+    }
+  },
+  "fallback_used_count": 0,
+  "scoring_sanity_correlation": null
+}

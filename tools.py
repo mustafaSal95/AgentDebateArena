@@ -15,6 +15,23 @@ from langchain_core.tools import tool
 
 DATA_DIR = Path(__file__).parent / "data"
 
+# Words too common to signal real topical relevance on their own — without
+# filtering these, a query like "honey's effect on exercise performance"
+# can "match" an unrelated passage just because it also contains "effect"
+# or "on". Keep this short; it only needs to catch high-frequency glue words.
+_STOPWORDS = {
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "of", "on", "in", "at", "to", "for", "and", "or", "but", "with",
+    "as", "by", "from", "that", "this", "these", "those", "it", "its",
+    "do", "does", "did", "not", "no", "have", "has", "had", "will",
+    "would", "can", "could", "should", "than", "then", "so", "if",
+    "about", "into", "over", "up", "down", "out", "effect", "effects",
+}
+
+
+def _meaningful_terms(text: str) -> set[str]:
+    return {t for t in re.findall(r"\w+", text.lower()) if t not in _STOPWORDS}
+
 
 @tool
 def web_search(query: str) -> str:
@@ -60,7 +77,7 @@ def _load_db():
             text = path.read_text(encoding="utf-8")
             paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
             for para in paragraphs:
-                para_terms = set(re.findall(r"\w+", para.lower()))
+                para_terms = _meaningful_terms(para)
                 _DB_CACHE.append((para_terms, path.name, para))
         except Exception:
             pass
@@ -76,16 +93,21 @@ def db_search(query: str) -> str:
     if not DATA_DIR.exists():
         return "db_search unavailable: data/ directory not found."
 
-    query_terms = set(re.findall(r"\w+", query.lower()))
+    query_terms = _meaningful_terms(query)
     if not query_terms:
         return "db_search: empty query."
 
     scored_matches = []
     cache = _load_db()
-    
+
+    # Require the overlap to cover a real portion of the query, not just a
+    # single incidental shared word — otherwise a passage on a totally
+    # different topic can "match" and get surfaced as if it were relevant.
+    min_overlap_ratio = 0.4
+
     for para_terms, name, para in cache:
         overlap = len(query_terms & para_terms)
-        if overlap > 0:
+        if overlap > 0 and (overlap / len(query_terms)) >= min_overlap_ratio:
             scored_matches.append((overlap, name, para))
 
     if not scored_matches:
