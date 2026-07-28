@@ -1,0 +1,17 @@
+Renewable Energy Overview
+
+Solar photovoltaic costs have fallen roughly 90% over the past decade, making
+solar the cheapest source of new electricity generation in many regions.
+Wind power costs have also dropped significantly, though less steeply than solar.
+
+Grid storage remains the primary bottleneck for renewable adoption at scale.
+Lithium-ion battery costs have declined but grid-scale storage is still
+expensive relative to fossil-fuel peaker plants for handling demand spikes.
+
+Nuclear power provides consistent baseload generation with a small land
+footprint, but new plant construction times average 7-10 years in most
+Western countries, with frequent cost overruns.
+
+Fossil fuels still supply roughly 60% of global electricity generation as of
+recent estimates, with coal being the single largest source of energy-related
+carbon emissions worldwide.

@@ -22,15 +22,74 @@ from personas import get_persona_prompt
 
 TOOLS = [web_search, db_search]
 
+# Clients are cached per temperature so repeated turns reuse the same
+# ChatGroq/Gemini instance instead of paying client-construction overhead
+# on every single node call. Small win on its own, but it adds up over a
+# multi-turn debate.
+_llm_cache: dict[float, "ChatGroq"] = {}
+_gemini_cache: dict[float, object] = {}
+
 
 def _get_llm(temperature: float = 0.7):
-    """Fresh ChatGroq client. Swap model_name/temperature via config if needed."""
+    """
+    Cached ChatGroq client for this temperature, or the deterministic
+    offline stand-in if config.is_offline is True (no GROQ_API_KEY set).
+    Bounded by config.agent_timeout_seconds so a hung call fails fast
+    instead of blocking the whole debate.
+    """
     from config import config
-    return ChatGroq(
-        model=config.model_name,
-        temperature=temperature,
-        api_key=config.groq_api_key,
-    )
+    if config.is_offline:
+        from offline_model import OfflineChatModel
+        return OfflineChatModel()
+    if temperature not in _llm_cache:
+        _llm_cache[temperature] = ChatGroq(
+            model=config.model_name,
+            temperature=temperature,
+            api_key=config.groq_api_key,
+            timeout=config.agent_timeout_seconds,
+        )
+    return _llm_cache[temperature]
+
+
+def _get_gemini_llm(temperature: float = 0.7):
+    """
+    Cached Gemini LLM client if a GEMINI_API_KEY is configured, else None.
+    Same timeout bound as the Groq client.
+    """
+    from config import config
+    if not config.has_gemini:
+        return None
+    if temperature not in _gemini_cache:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        _gemini_cache[temperature] = ChatGoogleGenerativeAI(
+            model=config.gemini_model,
+            temperature=temperature,
+            google_api_key=config.gemini_api_key,
+            timeout=config.agent_timeout_seconds,
+        )
+    return _gemini_cache[temperature]
+
+
+def _fallback_invoke(messages, agent_id: str, bind_tools: bool = False):
+    """
+    Fallback chain: Gemini → Offline (with db_search facts).
+    Called when Groq rate limits are hit.
+    """
+    gemini = _get_gemini_llm()
+    if gemini:
+        try:
+            if bind_tools:
+                llm = gemini.bind_tools(TOOLS)
+            else:
+                llm = gemini
+            print(f"\n[info] Falling back to Gemini for {agent_id}.")
+            return llm.invoke(messages)
+        except Exception as e:
+            print(f"[warning] Gemini fallback also failed ({e}); using offline model.")
+
+    print(f"\n[info] Using offline model with local knowledge base for {agent_id}.")
+    from offline_model import OfflineChatModel
+    return OfflineChatModel().invoke(messages)
 
 
 def select_agent(state: DebateState) -> dict:
@@ -68,41 +127,90 @@ def select_agent(state: DebateState) -> dict:
 
 def agent_llm_action(state: DebateState) -> dict:
     """
-    LLM call with tools bound. May emit tool_calls (routed to ToolNode by
-    tools_condition) or a direct response with no tool calls.
+    Single LLM call per pass, with tools bound. Two possible outcomes:
+      - Model emits tool_calls -> routed to ToolNode by tools_condition, then
+        this node is called again with the tool results in state["messages"].
+      - Model emits a direct response with no tool_calls -> that response IS
+        the final argument for this turn (no separate formulate_argument
+        pass). turns_left_per_agent is decremented here in that case.
+    This collapses what used to be two sequential LLM calls per turn
+    (agent_llm_action then formulate_argument) into one in the common case
+    where the agent doesn't need to research.
     IMPORTANT: response.name is set to agent_id so messages stay attributable.
     """
     agent_id = state["current_turn"]
-    llm = _get_llm().bind_tools(TOOLS)
-
     system = SystemMessage(content=get_persona_prompt(agent_id, state))
-    response = llm.invoke([system, *state["messages"]])
+    full_messages = [system, *state["messages"]]
+
+    # Prompt the LLM explicitly so it operates in assistant mode rather than
+    # continuation mode, and so a no-tool-call response is already the final,
+    # ready-to-score argument rather than a rough draft needing a second pass.
+    full_messages.append(HumanMessage(content=(
+        "It is your turn. If you need evidence, call a tool. Otherwise, skip "
+        "tools entirely and respond now with your final, plain-text persuasive "
+        "argument for this turn — concise, in character, under 100 words. "
+        "Do not output tool calls or `<function=...>` tags unless you are "
+        "actually invoking a tool."
+    )))
+
+    try:
+        llm = _get_llm().bind_tools(TOOLS)
+        response = llm.invoke(full_messages)
+    except Exception as e:
+        if "rate_limit_exceeded" in str(e) or "Rate limit reached" in str(e):
+            response = _fallback_invoke(full_messages, agent_id, bind_tools=True)
+        else:
+            import re, json
+            from langchain_core.messages import AIMessage
+            error_str = str(e)
+            if "tool_use_failed" in error_str and "failed_generation" in error_str:
+                match = re.search(r"'failed_generation': '(.*?)'", error_str)
+                if match:
+                    failed_gen = match.group(1)
+                    # parse <function=name>args</function>
+                    fn_match = re.search(r"<function=([a-zA-Z0-9_]+)[=>]*(.*?)</function>", failed_gen)
+                    if fn_match:
+                        name = fn_match.group(1)
+                        args_str = fn_match.group(2)
+                        if args_str.startswith(">"):
+                            args_str = args_str[1:]
+                        try:
+                            args = json.loads(args_str)
+                            print(f"\n[info] Recovered malformed tool call for {name}")
+                            tool_call_id = f"call_{name}_{len(full_messages)}"
+                            response = AIMessage(
+                                content="",
+                                tool_calls=[{
+                                    "name": name,
+                                    "args": args,
+                                    "id": tool_call_id,
+                                    "type": "tool_call"
+                                }]
+                            )
+                            response.name = agent_id
+                            return {"messages": [response]}
+                        except Exception:
+                            pass
+
+            print(f"[warning] tool-calling failed for {agent_id} ({e}); retrying without tools")
+            try:
+                llm = _get_llm()
+                response = llm.invoke(full_messages)
+            except Exception as inner_e:
+                if "rate_limit_exceeded" in str(inner_e) or "Rate limit reached" in str(inner_e):
+                    response = _fallback_invoke(full_messages, agent_id)
+                else:
+                    raise inner_e
+
     response.name = agent_id
 
-    return {"messages": [response]}
+    if getattr(response, "tool_calls", None):
+        # Still researching — route to ToolNode, come back here after.
+        return {"messages": [response]}
 
-
-def route_after_agent_action(state: DebateState) -> str:
-    """Wrapper around tools_condition so it reads cleanly in add_conditional_edges."""
-    return tools_condition(state)
-
-
-def formulate_argument(state: DebateState) -> dict:
-    """
-    Second LLM pass: takes whatever came back from agent_llm_action / tool
-    results and writes the actual persuasive argument for this turn.
-    """
-    agent_id = state["current_turn"]
-    llm = _get_llm(temperature=0.8)
-
-    prompt = (
-        f"{get_persona_prompt(agent_id, state)}\n\n"
-        "Using the research above (if any), write your argument for this turn. "
-        "Be persuasive, concise, and directly address the opponent's last point if there is one."
-    )
-    response = llm.invoke([*state["messages"], HumanMessage(content=prompt)])
-    response.name = agent_id
-
+    # No tool call: this response is the final argument for the turn, so
+    # this is the one place turn-count bookkeeping happens (formerly done
+    # in a separate formulate_argument node after a second LLM call).
     turns_left = dict(state["turns_left_per_agent"])
     if agent_id in turns_left:
         turns_left[agent_id] = max(0, turns_left[agent_id] - 1)
@@ -111,6 +219,11 @@ def formulate_argument(state: DebateState) -> dict:
         "messages": [response],
         "turns_left_per_agent": turns_left,
     }
+
+
+def route_after_agent_action(state: DebateState) -> str:
+    """Wrapper around tools_condition so it reads cleanly in add_conditional_edges."""
+    return tools_condition(state)
 
 
 def score_turn(state: DebateState) -> dict:
@@ -171,19 +284,11 @@ def score_turn(state: DebateState) -> dict:
 
 def display(state: DebateState) -> dict:
     """
-    Render this turn: last message, tool calls used, live scoreboard.
-    Pure side effect (printing) — returns no state changes.
-    Swap the print calls for your `rich`-based UI later.
+    Renders this turn via ui.render_turn: message panel, tool-call table,
+    live scoreboard. Pure side effect — returns no state changes.
     """
-    agent_id = state["current_turn"]
-    last_msg = state["messages"][-1]
-    last_score = state["scores_per_turn"][-1]
-
-    print(f"\n=== Turn {last_score['turn']} — {agent_id} ===")
-    print(last_msg.content)
-    print(f"Score delta: {last_score['scores'][agent_id]:+.0f} ({last_score['feedback']})")
-    print(f"Cumulative: {state['cumulative_scores']}")
-
+    from ui import render_turn
+    render_turn(state)
     return {}
 
 
