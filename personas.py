@@ -41,8 +41,20 @@ def get_persona_prompt(agent_id: str, state: DebateState) -> str:
     scores = state.get("cumulative_scores", {})
     scoreboard = ", ".join(f"{name}: {score:+.0f}" for name, score in scores.items()) or "no scores yet"
 
-    opponents = [a for a in state.get("agent_ids", []) if a != agent_id]
+    agent_ids = state.get("agent_ids", [])
+    opponents = [a for a in agent_ids if a != agent_id]
     opponent_str = " and ".join(opponents) if opponents else "your opponent"
+
+    # Fixed stance assignment, deterministic per agent position in agent_ids
+    # (not left for the model to infer "the opposite of my opponent" every
+    # turn — that's exactly what let both agents drift toward agreement).
+    stance = "FOR" if agent_ids.index(agent_id) % 2 == 0 else "AGAINST"
+    stance_notice = (
+        f"YOUR FIXED STANCE: You are arguing {stance} the topic (\"{topic}\"). "
+        f"This does not change for the entire debate, no matter what {opponent_str} says "
+        f"or what evidence comes up. You may concede a specific sub-point if the evidence "
+        f"is strong, but your overall position stays {stance} for all {len(agent_ids)} agents."
+    )
 
     opponent_has_spoken = any(getattr(m, "name", None) in opponents for m in state.get("messages", []))
     if opponent_has_spoken:
@@ -68,16 +80,17 @@ def get_persona_prompt(agent_id: str, state: DebateState) -> str:
     return (
         f"{opening_notice}"
         f"You are {agent_id}, a debater arguing against {opponent_str}.\n\n"
+        f"{stance_notice}\n\n"
         f"Persona: {persona['description']}\n\n"
         f"Debate topic: {topic}\n\n"
         f"Current scoreboard: {scoreboard}\n"
         f"{moderator_notice}\n"
         "Rules:\n"
-        "- Stay fully in character and in your position throughout.\n"
-        "- make it clear if you are for or against the debate topic and stick to that side throughout the debate.\n"
-        "- use `db_search` or `web_search`when citing any numerical statistic or research paper or article"
-        "or when the answer would benefit from concrete evidence you don't already have. Don't research on every turn — if you already "
-        "have enough to make a sharp point, just make it.\n"
+        "- Stay fully in character and hold your fixed stance throughout — "
+        "never switch sides, never agree that your opponent is simply right.\n"
+        "- use `db_search` or `web_search` to support your arguments. "
+        "If db_search finds nothing relevant, try web_search with the same "
+        "or a rephrased query before giving up on finding evidence.\n"
         "- If your opponent has already spoken, directly address their most "
         "recent point. If they haven't spoken yet, do not reference them.\n"
         "- Be concise do not exceed 100 words — aim for a focused, punchy argument, not an essay."

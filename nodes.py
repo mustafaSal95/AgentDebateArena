@@ -142,9 +142,17 @@ def agent_llm_action(state: DebateState) -> dict:
     system = SystemMessage(content=get_persona_prompt(agent_id, state))
     full_messages = [system, *state["messages"]]
 
-    # Prompt the LLM explicitly so it operates in assistant mode rather than
-    # continuation mode, and so a no-tool-call response is already the final,
-    # ready-to-score argument rather than a rough draft needing a second pass.
+    last_msg = state["messages"][-1] if state["messages"] else None
+    if (last_msg is not None
+            and last_msg.__class__.__name__ == "ToolMessage"
+            and getattr(last_msg, "name", None) == "db_search"
+            and ("No local documents matched" in str(last_msg.content)
+                 or "unavailable" in str(last_msg.content))):
+        full_messages.append(HumanMessage(content=(
+            "db_search found nothing relevant. Call web_search now with the "
+            "same or a rephrased query before writing your argument."
+        )))
+
     full_messages.append(HumanMessage(content=(
         "It is your turn. If you need evidence, call a tool. Otherwise, skip "
         "tools entirely and respond now with your final, plain-text persuasive "
@@ -153,8 +161,19 @@ def agent_llm_action(state: DebateState) -> dict:
         "actually invoking a tool."
     )))
 
+    # Tool use tends to collapse to near-zero if it's left fully optional —
+    # models default to answering directly. Force a tool call when this
+    # agent hasn't used one in their last 2 turns, so evidence-gathering
+    # actually happens instead of being skipped by default.
+    recent_own_ai_msgs = [
+        m for m in reversed(state["messages"])
+        if m.__class__.__name__ == "AIMessage" and getattr(m, "name", None) == agent_id
+    ][:2]
+    used_tool_recently = any(getattr(m, "tool_calls", None) for m in recent_own_ai_msgs)
+    force_tool_choice = "db_search" if not used_tool_recently else "auto"
+
     try:
-        llm = _get_llm().bind_tools(TOOLS)
+        llm = _get_llm().bind_tools(TOOLS, tool_choice=force_tool_choice)
         response = llm.invoke(full_messages)
     except Exception as e:
         if "rate_limit_exceeded" in str(e) or "Rate limit reached" in str(e):
@@ -176,6 +195,9 @@ def agent_llm_action(state: DebateState) -> dict:
                             args_str = args_str[1:]
                         try:
                             args = json.loads(args_str)
+                        except json.JSONDecodeError:              # <-- new
+                            args = {"query": args_str.strip()}
+                        try:
                             print(f"\n[info] Recovered malformed tool call for {name}")
                             tool_call_id = f"call_{name}_{len(full_messages)}"
                             response = AIMessage(

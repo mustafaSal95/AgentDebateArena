@@ -1,0 +1,85 @@
+{
+  "topic": "Can veganism be a sustainable diet for everyone?",
+  "total_turns": 2,
+  "agent_ids": [
+    "Aria",
+    "Karl"
+  ],
+  "turn_records": [
+    {
+      "turn_number": 1,
+      "agent_id": "Aria",
+      "argument_text": "While it's true that a vegan diet can be challenging to adopt, the benefits to the environment, animal welfare, and human health are undeniable. Studies have shown that a well-planned vegan diet can reduce greenhouse gas emissions by up to 50%, conserve water by up to 33%, and reduce the risk of heart disease by 16%. With the global population projected to reach 9.7 billion by 2050, adopting sustainable diets like veganism is crucial for ensuring a livable future for all. It's time to prioritize the planet and our health.",
+      "word_count": 90,
+      "format_compliant": true,
+      "format_issues": [],
+      "tool_calls_count": 1,
+      "opening_compliance": true,
+      "stat_citing_compliance": true,
+      "tool_validity_rate": 1.0,
+      "selection_fit": "db_only",
+      "query_redundancy_rate": 0.0,
+      "numeric_claims_count": 5,
+      "supported_claims_count": 0,
+      "supported_claim_rate": 0.0,
+      "unsupported_claim_rate": 1.0,
+      "repetition_score": 0.0,
+      "rebuttal_overlap_score": 0.0,
+      "moderator_addressed": null,
+      "persona_adherence_score": null,
+      "rebuttal_quality_score": null,
+      "llm_groundedness_score": null,
+      "llm_critique": null
+    },
+    {
+      "turn_number": 2,
+      "agent_id": "Karl",
+      "argument_text": "As we consider the sustainability of veganism for everyone, let's not forget the human cost. In many developing countries, access to protein-rich foods is already limited, and a widespread shift to veganism could exacerbate this issue. Adblocking and AI-powered filtering tools have been used to block access to nutrition information, and many people rely on animal-sourced foods for basic nutrition. We must prioritize the most vulnerable members of society and ensure that any dietary changes we make do not further marginalize them.",
+      "word_count": 82,
+      "format_compliant": true,
+      "format_issues": [],
+      "tool_calls_count": 1,
+      "opening_compliance": true,
+      "stat_citing_compliance": true,
+      "tool_validity_rate": 1.0,
+      "selection_fit": "db_only",
+      "query_redundancy_rate": 0.0,
+      "numeric_claims_count": 0,
+      "supported_claims_count": 0,
+      "supported_claim_rate": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "repetition_score": 0.0,
+      "rebuttal_overlap_score": 0.0,
+      "moderator_addressed": null,
+      "persona_adherence_score": null,
+      "rebuttal_quality_score": null,
+      "llm_groundedness_score": null,
+      "llm_critique": null
+    }
+  ],
+  "overall_tool_compliance_rate": 1.0,
+  "overall_tool_validity_rate": 1.0,
+  "overall_citation_support_rate": 0.5,
+  "overall_format_compliance_rate": 1.0,
+  "overall_unsupported_claim_rate": 0.5,
+  "agent_summaries": {
+    "Aria": {
+      "turns_count": 1,
+      "avg_word_count": 90.0,
+      "format_compliance_rate": 1.0,
+      "tool_calls_count": 1,
+      "avg_supported_claim_rate": 0.0,
+      "avg_repetition_score": 0.0
+    },
+    "Karl": {
+      "turns_count": 1,
+      "avg_word_count": 82.0,
+      "format_compliance_rate": 1.0,
+      "tool_calls_count": 1,
+      "avg_supported_claim_rate": 1.0,
+      "avg_repetition_score": 0.0
+    }
+  },
+  "fallback_used_count": 0,
+  "scoring_sanity_correlation": null
+}
